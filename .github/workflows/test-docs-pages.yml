@@ -1,0 +1,111 @@
+# Workflow: Release and publish artifacts to Maven Central
+# Purpose: Builds, signs, and publishes Maven artifacts to Sonatype OSSRH, then tags the released version.
+# Prerequisites: pom.xml must be on a *-SNAPSHOT version; We need to change logic for non-SNAPSHOT versions.
+# Notes:
+#   - release/* branches: major version increment (e.g., 1.2.3-SNAPSHOT to 2.0.0-SNAPSHOT)
+#   - hotfix/* branches: minor version increment (e.g., 1.2.3-SNAPSHOT to 1.3.0-SNAPSHOT)
+# Adjust version computation logic if patch releases are desired instead of minor bumps (e.g., 1.2.3-SNAPSHOT to 1.3.0-SNAPSHOT).
+
+name: "Test - Docs and OpenAPI Pages (throwaway,safe to delete)"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  set-vars:
+    name: Compute version
+    runs-on: ubuntu-latest
+    outputs:
+      minor_version: ${{ steps.vars.outputs.minor_version }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: 'temurin'
+
+      - name: Compute version from pom.xml
+        id: vars
+        run: |
+          currentVersion=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          releaseVersion=${currentVersion%-SNAPSHOT}
+
+          n=${releaseVersion//[!0-9]/ }
+          a=(${n//\./ })
+
+          minorVersion="${a[0]}.${a[1]}"
+          echo "minor_version=${minorVersion}" >> $GITHUB_OUTPUT
+
+
+  test-javadoc:
+    name: TEST - Generate and Publish Javadoc
+    runs-on: ubuntu-latest
+    needs: set-vars
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: 'temurin'
+
+      - name: Generate Javadoc
+        run: |
+          mvn -B -e package javadoc:javadoc javadoc:aggregate -Pdistro,distro-webjar,javadocs \
+            -pl '!engine-rest/engine-rest-openapi' \
+            -DskipTests=true -DskipITs=true -Dskip.frontend.build=true \
+            -s ./settings.xml -Dmaven.resolver.transport=wagon -Dmaven.wagon.http.pool=false
+
+      - name: Publish Javadoc to GitHub Pages (test)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/reports/apidocs
+          destination_dir: test-javadocs/${{ needs.publish-central.outputs.minor_version }}
+          keep_files: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'test: publish Javadoc (throwaway workflow)'
+
+  test-openapi-spec:
+    name: TEST - Generate and Publish OpenAPI Spec
+    runs-on: ubuntu-latest
+    needs: set-vars
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: 'temurin'
+
+      - name: Generate OpenAPI Spec
+        run: |
+          cd engine-rest && \
+          mvn -B -e package  -pl '!engine-rest,!assembly' \
+           -s ../settings.xml -Dmaven.test.skip -Dmaven.resolver.transport=wagon -Dmaven.wagon.http.pool=false 
+
+      - name: Publish OpenAPI Spec to GitHub Pages (test)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./engine-rest/docs/target/dependency
+          destination_dir: test-openapi/${{ needs.publish-central.outputs.minor_version }}
+          keep_files: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'test: publish OpenAPI spec (throwaway workflow)'
