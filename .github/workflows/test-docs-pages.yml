@@ -10,6 +10,9 @@ name: "Test - Docs and OpenAPI Pages (throwaway,safe to delete)"
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/test-gh-pages-actions
 
 permissions:
   contents: write
@@ -71,7 +74,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./target/reports/apidocs
-          destination_dir: test-javadocs/${{ needs.publish-central.outputs.minor_version }}
+          destination_dir: test-javadocs/${{ needs.set-vars.outputs.minor_version }}
           keep_files: true
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
@@ -104,7 +107,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./engine-rest/docs/target/dependency
-          destination_dir: test-openapi/${{ needs.publish-central.outputs.minor_version }}
+          destination_dir: test-openapi/${{ needs.set-vars.outputs.minor_version }}
           keep_files: true
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
