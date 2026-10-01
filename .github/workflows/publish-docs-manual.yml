@@ -1,0 +1,21 @@
+name: "Publish docs (manual backfill)"
+
+on:
+  workflow_dispatch:
+      inputs:
+        release-tag:
+          description: 'Release tag to check out and generate docs from'
+          required: true
+  push:
+    branches:
+      - feature/test-gh-pages-actions
+
+permissions:
+  contents: write
+
+jobs:
+  publish-docs:
+    name: Publish docs
+    uses: ./.github/workflows/publish-docs-reusable.yml
+    with:
+      release-tag: ${{ inputs.release-tag || 'v3.0.1' }}
